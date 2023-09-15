@@ -1,6 +1,6 @@
 import json
 import mysql.connector
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, HTTPException
 
 
 class Db:
@@ -35,14 +35,58 @@ class SqlData(Db):
 
     @staticmethod
     def sql(s):
-        conn = Db.connect()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(s)
-        records = cursor.fetchall()
-        return records
+        try:
+            conn = Db.connect()
+        except mysql.connector.Error as err:
+            error_info = {
+                "error_number": err.errno,
+                "sql_state": err.sqlstate,
+                "message": err.msg
+            }
+            raise HTTPException(status_code=400, detail=error_info)
+        try:
+            cursor = conn.cursor(dictionary=True)
+        except mysql.connector.Error as err:
+            # Returning an HTTPException with a JSON response
+            error_info = {
+                "error_number": err.errno,
+                "sql_state": err.sqlstate,
+                "message": err.msg
+            }
+            raise HTTPException(status_code=400, detail=error_info)
+        try:
+            cursor.execute(s)
+        except mysql.connector.Error as err:
+            # Returning an HTTPException with a JSON response
+            error_info = {
+                "error_number": err.errno,
+                "sql_state": err.sqlstate,
+                "message": err.msg
+            }
+            raise HTTPException(status_code=400, detail=error_info)
+        # try:
+        #     records = cursor.fetchall()
+        # except mysql.connector.Error as err:
+            # Returning an HTTPException with a JSON response
+        #    error_info = {
+        #        "error_number": err.errno,
+        #        "sql_state": err.sqlstate,
+        #        "message": err.msg
+        #    }
+        #    raise HTTPException(status_code=400, detail=error_info)
+        #return records
+        return {}
 
     @staticmethod
     def sql0(s):
+        conn = Db.connect()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(s)
+        records = cursor.fetchone()
+        return records
+
+    @staticmethod
+    def sqlC(s):
         conn = Db.connect()
         cursor = conn.cursor()
         cursor.execute(s)
@@ -54,31 +98,44 @@ class SqlData(Db):
         conn = Db.connect()
         cursor = conn.cursor()
         cursor.execute(s)
+        try:
+            conn.commit()
+        except:
+            pass
         return
 
     @staticmethod
     def post(my_dict):
-        if 'id' not in my_dict:
-            my_id = 0
-        else:
-            my_id = my_dict['id']
 
-        if 'action' not in my_dict:
-            my_action = "insert"
-        else:
-            my_action = my_dict['action']
+        try:
+            if 'id' not in my_dict:
+                my_id = 0
+            else:
+                my_id = my_dict['id']
+        except:
+            return {"s": "1"}
 
-        if 'table_name' not in my_dict:
-            return 900
-        else:
-            table_name = my_dict['table_name']
+        try:
+            if 'action' not in my_dict:
+                my_action = "insert"
+            else:
+                my_action = my_dict['action']
+        except:
+            return {"s": "2"}
+
+        try:
+            if 'table_name' not in my_dict:
+                return 900
+            else:
+                table_name = my_dict['table_name']
+        except:
+            return {"s": "3"}
 
         conn = Db.connect()
         cursor = conn.cursor()
         if my_action == 'insert' or my_action == 'update':
             if my_id == 0 or my_id == '':
                 sql = "insert into " + table_name + "(create_timestamp) values (now())"
-                print(sql)
                 cursor.execute(sql)
                 cursor.execute("SELECT LAST_INSERT_ID()")
                 my_id = cursor.fetchone()[0]
@@ -105,7 +162,7 @@ class SqlData(Db):
 
         sql = "insert into " + table_name
         cols = " (create_timestamp"
-        vals = " (now()"
+        vals = " values (now()"
         values = []
         for key, value in my_dict.items():
             if cols == " (":
@@ -123,8 +180,6 @@ class SqlData(Db):
         cols += ")"
         vals += ")"
         sql += cols + vals
-        print(sql)
-
         cursor.execute(sql, values)
         cursor.execute("SELECT LAST_INSERT_ID()")
         my_id = cursor.fetchone()[0]
